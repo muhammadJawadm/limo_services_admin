@@ -30,7 +30,7 @@ export default function Drivers() {
 
   const assignmentsByDriver = useMemo(() => {
     return trips.reduce((acc, trip) => {
-      if (!trip.driverId || !["Scheduled", "Assigned", "In Progress"].includes(trip.status)) {
+      if (!trip.driverId || !["pending_assignment", "assigned", "in_progress"].includes(trip.status)) {
         return acc
       }
       acc[trip.driverId] = (acc[trip.driverId] || 0) + 1

@@ -2,7 +2,17 @@ import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useOps } from "../context/OpsContext"
 
-const statusOptions = ["All", "Scheduled", "Assigned", "In Progress", "Completed", "Cancelled"]
+const statusOptions = ["All", "pending_assignment", "assigned", "in_progress", "completed", "cancelled"]
+
+function statusLabel(status) {
+  return {
+    pending_assignment: "Pending Assignment",
+    assigned: "Assigned",
+    in_progress: "In Progress",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  }[status] || status
+}
 
 export default function Bookings() {
   const { trips, driversById } = useOps()
@@ -85,7 +95,7 @@ export default function Bookings() {
                   <td className="px-4 py-3 text-slate-700">{trip.dropoffAddress}</td>
                   <td className="px-4 py-3 text-slate-700">{trip.vehicleClass}</td>
                   <td className="px-4 py-3 text-slate-700">{trip.tripType}</td>
-                  <td className="px-4 py-3"><span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">{trip.status}</span></td>
+                  <td className="px-4 py-3"><span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">{statusLabel(trip.status)}</span></td>
                   <td className="px-4 py-3 text-slate-700">{trip.driverId ? `Assigned (${driversById[trip.driverId]?.name || trip.driverId})` : "Unassigned"}</td>
                   <td className="px-4 py-3">
                     <button className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors">

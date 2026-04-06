@@ -4,6 +4,13 @@ import { seedAuditLogs, seedDrivers, seedTrips } from "../data/opsSeed"
 
 const OpsContext = createContext(null)
 const REFERENCE_NOW = new Date("2026-04-03T00:00:00").getTime()
+const OPEN_TRIP_STATUSES = ["pending_assignment", "assigned", "in_progress"]
+
+const quickMessageTemplates = {
+  driver_reached_pickup: "Driver reached pickup",
+  trip_started: "Trip started",
+  trip_completed: "Trip completed",
+}
 
 export function useOps() {
   const context = useContext(OpsContext)
@@ -30,18 +37,26 @@ export function OpsProvider({ children }) {
   const [drivers, setDrivers] = useState(() => clone(seedDrivers))
   const [auditLogs, setAuditLogs] = useState(() => clone(seedAuditLogs))
   const [alerts, setAlerts] = useState([])
+  const [tripChats, setTripChats] = useState({})
 
   const tripsById = useMemo(() => Object.fromEntries(trips.map((trip) => [trip.id, trip])), [trips])
   const driversById = useMemo(() => Object.fromEntries(drivers.map((driver) => [driver.id, driver])), [drivers])
 
   const summary = useMemo(() => {
     const now = REFERENCE_NOW
-    const upcomingTrips = trips.filter((trip) => toDateTime(trip.pickupDateTime) >= now && ["Scheduled", "Assigned"].includes(trip.status)).length
-    const activeTrips = trips.filter((trip) => trip.status === "In Progress").length
-    const unassignedTrips = trips.filter((trip) => !trip.driverId && ["Scheduled", "Assigned"].includes(trip.status)).length
-    const completedTrips = trips.filter((trip) => trip.status === "Completed").length
+    const upcomingTrips = trips.filter((trip) => toDateTime(trip.pickupDateTime) >= now && ["pending_assignment", "assigned"].includes(trip.status)).length
+    const activeTrips = trips.filter((trip) => trip.status === "in_progress").length
+    const unassignedTrips = trips.filter((trip) => !trip.driverId && ["pending_assignment", "assigned"].includes(trip.status)).length
+    const completedTrips = trips.filter((trip) => trip.status === "completed").length
+    const newRideRequests = trips.filter((trip) => trip.status === "pending_assignment").length
 
-    return { upcomingTrips, activeTrips, unassignedTrips, completedTrips }
+    return { upcomingTrips, activeTrips, unassignedTrips, completedTrips, newRideRequests }
+  }, [trips])
+
+  const newRideQueue = useMemo(() => {
+    return trips
+      .filter((trip) => trip.status === "pending_assignment")
+      .sort((a, b) => toDateTime(a.pickupDateTime) - toDateTime(b.pickupDateTime))
   }, [trips])
 
   const pushAudit = (entry) => {
@@ -57,7 +72,7 @@ export function OpsProvider({ children }) {
       if (trip.id === tripId || trip.driverId !== driverId) {
         return false
       }
-      if (!["Scheduled", "Assigned", "In Progress"].includes(trip.status)) {
+      if (!OPEN_TRIP_STATUSES.includes(trip.status)) {
         return false
       }
 
@@ -106,6 +121,10 @@ export function OpsProvider({ children }) {
 
   const assignDriver = (tripId, driverId, actor = "admin") => {
     const trip = tripsById[tripId]
+    if (!trip) {
+      return { ok: false, message: "Trip not found" }
+    }
+
     const eligible = getEligibleDrivers(trip).find((driver) => driver.id === driverId)
 
     if (!eligible || !eligible.eligible) {
@@ -118,11 +137,30 @@ export function OpsProvider({ children }) {
           ? {
               ...currentTrip,
               driverId,
-              status: currentTrip.status === "Scheduled" ? "Assigned" : currentTrip.status,
+              status: "assigned",
             }
           : currentTrip
       )
     )
+
+    setTripChats((prev) => {
+      const existing = prev[tripId] || []
+      return {
+        ...prev,
+        [tripId]: [
+          ...existing,
+          {
+            id: `MSG-${Date.now()}`,
+            tripId,
+            senderType: "system",
+            senderName: "System",
+            text: `Chat activated. Driver ${driverId} assigned.`,
+            createdAt: new Date().toISOString(),
+            quickType: null,
+          },
+        ],
+      }
+    })
 
     pushAudit({
       actionType: "Driver Assigned",
@@ -273,7 +311,7 @@ export function OpsProvider({ children }) {
     setTrips((prev) =>
       prev.map((trip) =>
         trip.id === tripId
-          ? { ...trip, driverId: null, status: "Scheduled" }
+          ? { ...trip, driverId: null, status: "pending_assignment" }
           : trip
       )
     )
@@ -366,7 +404,7 @@ export function OpsProvider({ children }) {
         currentTrip.id === tripId
           ? {
               ...currentTrip,
-              status: "Cancelled",
+              status: "cancelled",
               cancellation: {
                 requestedBy,
                 approved: true,
@@ -406,6 +444,59 @@ export function OpsProvider({ children }) {
     return { ok: true }
   }
 
+  const getTripMessages = (tripId) => tripChats[tripId] || []
+
+  const sendTripMessage = ({ tripId, senderType = "admin", text = "", quickType = null }) => {
+    const trip = tripsById[tripId]
+    if (!trip) {
+      return { ok: false, message: "Trip not found" }
+    }
+
+    if (!trip.driverId || trip.status === "pending_assignment") {
+      return { ok: false, message: "Chat is only available after a driver is assigned" }
+    }
+
+    if (trip.status === "cancelled") {
+      return { ok: false, message: "Chat is unavailable for cancelled trips" }
+    }
+
+    if (!["admin", "driver"].includes(senderType)) {
+      return { ok: false, message: "Invalid sender" }
+    }
+
+    const normalizedText = quickType ? quickMessageTemplates[quickType] : text.trim()
+    if (!normalizedText) {
+      return { ok: false, message: "Message cannot be empty" }
+    }
+
+    const senderName = senderType === "admin" ? "Admin Dispatch" : (driversById[trip.driverId]?.name || "Assigned Driver")
+
+    const message = {
+      id: `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      tripId,
+      senderType,
+      senderId: senderType === "admin" ? "admin" : trip.driverId,
+      senderName,
+      text: normalizedText,
+      createdAt: new Date().toISOString(),
+      quickType,
+    }
+
+    setTripChats((prev) => ({
+      ...prev,
+      [tripId]: [...(prev[tripId] || []), message],
+    }))
+
+    pushAudit({
+      actionType: "Trip Chat Message",
+      actor: senderType,
+      tripId,
+      details: quickType ? `Quick message sent: ${normalizedText}` : "Chat message sent",
+    })
+
+    return { ok: true }
+  }
+
   const value = {
     trips,
     drivers,
@@ -413,7 +504,9 @@ export function OpsProvider({ children }) {
     driversById,
     alerts,
     summary,
+    newRideQueue,
     auditLogs,
+    tripChats,
     getEligibleDrivers,
     assignDriver,
     unassignDriver,
@@ -423,6 +516,9 @@ export function OpsProvider({ children }) {
     updateTripStatus,
     overridePrice,
     cancelTrip,
+    getTripMessages,
+    sendTripMessage,
+    quickMessageTemplates,
   }
 
   return <OpsContext.Provider value={value}>{children}</OpsContext.Provider>

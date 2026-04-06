@@ -8,14 +8,14 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState({ username: 'Test Admin' });
 
   const login = (username) => {
     setUser({ username: username || 'Admin User' });
   };
 
   const logout = () => {
-    setUser(null);
+    setUser({ username: 'Test Admin' });
   };
 
   return (

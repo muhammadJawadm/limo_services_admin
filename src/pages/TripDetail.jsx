@@ -3,11 +3,34 @@ import { Link, useParams } from "react-router-dom"
 import { useOps } from "../context/OpsContext"
 import { maskSensitive, money } from "../data/opsSeed"
 
-const tripStatuses = ["Scheduled", "Assigned", "In Progress", "Completed", "Cancelled"]
+const tripStatuses = ["pending_assignment", "assigned", "in_progress", "completed", "cancelled"]
+
+function statusLabel(status) {
+  return {
+    pending_assignment: "Pending Assignment",
+    assigned: "Assigned",
+    in_progress: "In Progress",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  }[status] || status
+}
 
 export default function TripDetail() {
   const { tripId } = useParams()
-  const { tripsById, auditLogs, getEligibleDrivers, assignDriver, unassignDriver, updateTripStatus, overridePrice, cancelTrip, driversById } = useOps()
+  const {
+    tripsById,
+    auditLogs,
+    getEligibleDrivers,
+    assignDriver,
+    unassignDriver,
+    updateTripStatus,
+    overridePrice,
+    cancelTrip,
+    driversById,
+    getTripMessages,
+    sendTripMessage,
+    quickMessageTemplates,
+  } = useOps()
   const [status, setStatus] = useState("")
   const [overrideValue, setOverrideValue] = useState("")
   const [overrideReason, setOverrideReason] = useState("")
@@ -20,6 +43,8 @@ export default function TripDetail() {
   const [locationFilter, setLocationFilter] = useState("All")
   const [showEligibleOnly, setShowEligibleOnly] = useState(false)
   const [assignmentNotice, setAssignmentNotice] = useState("")
+  const [chatInput, setChatInput] = useState("")
+  const [chatNotice, setChatNotice] = useState("")
 
   const trip = tripsById[tripId]
 
@@ -41,6 +66,7 @@ export default function TripDetail() {
   }, [trip, getEligibleDrivers, vehicleClassFilter, vehicleStatusFilter, driverStatusFilter, availabilityFilter, locationFilter, showEligibleOnly])
 
   const tripAudit = useMemo(() => auditLogs.filter((log) => log.tripId === tripId), [auditLogs, tripId])
+  const tripMessages = useMemo(() => getTripMessages(tripId), [getTripMessages, tripId])
 
   if (!trip) {
     return (
@@ -148,6 +174,7 @@ export default function TripDetail() {
 
       <article className="panel p-5 space-y-3">
         <h3 className="font-semibold text-slate-900">Driver assignment and management</h3>
+        <p className="text-sm text-slate-600">Current ride status: <span className="font-semibold">{statusLabel(trip.status)}</span></p>
         <div className="text-sm text-slate-700">
           {selectedDriver ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -224,13 +251,88 @@ export default function TripDetail() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2 pt-2 border-t border-slate-100">
-          <select value={status || trip.status} onChange={(event) => setStatus(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">{tripStatuses.map((item) => <option key={item}>{item}</option>)}</select>
+          <select value={status || trip.status} onChange={(event) => setStatus(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">{tripStatuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}</select>
           <button onClick={() => updateTripStatus(trip.id, status || trip.status)} className="px-3 py-2 rounded-xl bg-slate-900 text-white text-sm">Update trip status</button>
           <button onClick={() => cancelTrip({ tripId: trip.id, requestedBy: "admin", reason: "Admin canceled assigned ride" })} className="px-3 py-2 rounded-xl bg-rose-600 text-white text-sm">Cancel this ride</button>
           {trip.driverId && (
              <button onClick={() => unassignDriver(trip.id, "admin", "Admin unassigned driver")} className="px-3 py-2 rounded-xl bg-amber-500 text-white text-sm">Unassign driver</button>
           )}
         </div>
+      </article>
+
+      <article className="panel p-5 space-y-3">
+        <h3 className="font-semibold text-slate-900">Admin and driver chat</h3>
+        {!trip.driverId ? (
+          <p className="text-sm text-slate-500">Chat is enabled after manual driver assignment.</p>
+        ) : (
+          <>
+            <p className="text-sm text-slate-600">Ride-specific thread between admin and assigned driver: <span className="font-semibold">{selectedDriver?.name || trip.driverId}</span></p>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 max-h-64 overflow-y-auto space-y-2">
+              {tripMessages.length === 0 && <p className="text-sm text-slate-500">No messages yet for this ride.</p>}
+              {tripMessages.map((message) => (
+                <div key={message.id} className={`rounded-lg px-3 py-2 text-sm ${message.senderType === "admin" ? "bg-blue-100 text-blue-900" : message.senderType === "driver" ? "bg-emerald-100 text-emerald-900" : "bg-slate-200 text-slate-700"}`}>
+                  <p className="font-semibold">{message.senderName}</p>
+                  <p>{message.text}</p>
+                  <p className="text-xs opacity-70 mt-1">{new Date(message.createdAt).toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+
+            {chatNotice && <p className="text-sm text-rose-600">{chatNotice}</p>}
+
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+              <input
+                value={chatInput}
+                onChange={(event) => setChatInput(event.target.value)}
+                placeholder="Type a message to the assigned driver"
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-4"
+              />
+              <button
+                onClick={() => {
+                  const result = sendTripMessage({ tripId: trip.id, senderType: "admin", text: chatInput })
+                  setChatNotice(result.ok ? "" : result.message)
+                  if (result.ok) {
+                    setChatInput("")
+                  }
+                }}
+                className="px-3 py-2 rounded-xl bg-[var(--brand-primary)] text-white text-sm"
+              >
+                Send
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                onClick={() => {
+                  const result = sendTripMessage({ tripId: trip.id, senderType: "driver", quickType: "driver_reached_pickup" })
+                  setChatNotice(result.ok ? "" : result.message)
+                }}
+                className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs"
+              >
+                {quickMessageTemplates.driver_reached_pickup}
+              </button>
+              <button
+                onClick={() => {
+                  const result = sendTripMessage({ tripId: trip.id, senderType: "driver", quickType: "trip_started" })
+                  setChatNotice(result.ok ? "" : result.message)
+                }}
+                className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs"
+              >
+                {quickMessageTemplates.trip_started}
+              </button>
+              <button
+                onClick={() => {
+                  const result = sendTripMessage({ tripId: trip.id, senderType: "driver", quickType: "trip_completed" })
+                  setChatNotice(result.ok ? "" : result.message)
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-700 text-white text-xs"
+              >
+                {quickMessageTemplates.trip_completed}
+              </button>
+            </div>
+          </>
+        )}
       </article>
 
       <article className="panel p-5 space-y-3">
