@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useMemo, useState } from "react"
 import { seedAuditLogs, seedDrivers, seedTrips } from "../data/opsSeed"
+import apiService from "../services/api"
 
 const OpsContext = createContext(null)
 const REFERENCE_NOW = new Date("2026-04-03T00:00:00").getTime()
@@ -65,6 +66,18 @@ export function OpsProvider({ children }) {
 
   const pushAlert = (entry) => {
     setAlerts((prev) => [{ id: Date.now(), time: new Date().toLocaleTimeString(), ...entry }, ...prev])
+  }
+
+  const emitRideCancellationNotification = (trip, requestedBy, reason, actor) => {
+    void apiService.notifyRideCancellation({
+      tripId: trip.id,
+      requestedBy,
+      reason,
+      trip,
+      actor,
+    }).catch((error) => {
+      console.warn("Failed to emit ride cancellation notification", error)
+    })
   }
 
   const isBufferClear = (tripId, driverId, startDateTime, endDateTime) => {
@@ -328,6 +341,8 @@ export function OpsProvider({ children }) {
       detail: `Reason: ${reason}. Immediate reassignment required.`,
     })
 
+    emitRideCancellationNotification(tripsById[tripId], "driver", reason, actor)
+
     return { ok: true }
   }
 
@@ -440,6 +455,8 @@ export function OpsProvider({ children }) {
     if (requestedBy === "customer") {
       pushAlert({ title: `Customer cancelled ${tripId}`, detail: "Review refund and payment decision." })
     }
+
+    emitRideCancellationNotification(trip, requestedBy, reason, actor)
 
     return { ok: true }
   }

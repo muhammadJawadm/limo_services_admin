@@ -24,14 +24,14 @@ const NAV = [
   { icon: Users, label: "Customers", path: "/customers" },
   { icon: Wallet, label: "Payments", path: "/payments" },
   { icon: Bell, label: "Notifications", path: "/notifications" },
-  { icon: ClipboardList, label: "Audit Logs", path: "/audit-logs" },
+  // { icon: ClipboardList, label: "Audit Logs", path: "/audit-logs" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ]
 
 export default function Sidebar({ collapsed, mobileOpen, setMobileOpen }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user, logout, isAuthenticated } = useAuth()
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function Sidebar({ collapsed, mobileOpen, setMobileOpen }) {
       : "text-slate-600 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-primary)] border-transparent"
     }`
 
-  const visibleNav = user ? NAV : []
+  const visibleNav = isAuthenticated ? NAV : []
 
   return (
     <>

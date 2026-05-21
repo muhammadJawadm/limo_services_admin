@@ -38,9 +38,20 @@ export default function Header({ onMenuClick }) {
     navigate('/login');
   }
 
-  // Fallback to "User" if no authentication user is found somehow
-  const currentUsername = user?.username || "Guest";
-  const userInitials = currentUsername.charAt(0).toUpperCase();
+  const currentUsername =
+    user?.firstName && user?.lastName
+      ? `${user.firstName} ${user.lastName}`
+      : user?.name ||
+        user?.username ||
+        user?.email ||
+        "Guest"
+
+  const userInitials = currentUsername
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "G"
 
   return (
     <div className="sticky top-0 z-10">
