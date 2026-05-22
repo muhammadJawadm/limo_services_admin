@@ -69,6 +69,53 @@ function getBookingVehicleLabel(booking) {
   return booking?.vehicleCategory?.classification || booking?.vehicleCategory?.name || booking?.vehicleClass || "Any class"
 }
 
+function getBookingPassengerEmail(booking) {
+  return booking?.passengerEmail || booking?.user?.email || booking?.customer?.email || ""
+}
+
+function getBookingPassengerPhone(booking) {
+  return booking?.passengerPhone || booking?.user?.phone || booking?.customer?.phone || "N/A"
+}
+
+function buildAssignmentEmail(booking, driver) {
+  const passengerName = getPassengerName(booking)
+  const passengerEmail = getBookingPassengerEmail(booking)
+  const passengerPhone = getBookingPassengerPhone(booking)
+  const bookingNumber = booking?.confNumber || booking?.confirmationNumber || booking?.id || "N/A"
+  const dateInfo = getBookingDateTime(booking)
+  const pickupLocation = booking?.pickupLocation || booking?.pickupAddress || "N/A"
+  const dropoffLocation = booking?.dropoffLocation || booking?.dropoffAddress || "N/A"
+  const vehicleLabel = getBookingVehicleLabel(booking)
+  const driverName = getDriverName(driver)
+  const driverPhone = driver?.phone || driver?.user?.phone || "N/A"
+
+  return {
+    to: passengerEmail,
+    subject: `Driver assigned for booking ${bookingNumber}`,
+    message: [
+      `Hello ${passengerName},`,
+      "",
+      `A driver has been assigned to your booking ${bookingNumber}.`,
+      "",
+      `Booking details:`,
+      `- Booking number: ${bookingNumber}`,
+      `- Pickup: ${pickupLocation}`,
+      `- Dropoff: ${dropoffLocation}`,
+      `- Date: ${dateInfo.dateText}${dateInfo.timeText ? ` at ${dateInfo.timeText}` : ""}`,
+      `- Vehicle class: ${vehicleLabel}`,
+      `- Passenger phone: ${passengerPhone}`,
+      "",
+      `Assigned driver:`,
+      `- Name: ${driverName}`,
+      `- Phone: ${driverPhone}`,
+      `- Company: ${driver?.companyName || driver?.company || "N/A"}`,
+      `- Location: ${driver?.location || driver?.user?.location || "N/A"}`,
+      "",
+      "If you need any help, please contact the admin team.",
+    ].join("\n"),
+  }
+}
+
 function getBookingRequirementSummary(booking) {
   return {
     vehicleClass: getBookingVehicleLabel(booking),
@@ -212,6 +259,7 @@ export default function Bookings() {
   const [chatError, setChatError] = useState(null)
   const [chatStatus, setChatStatus] = useState(null)
   const [socketConnected, setSocketConnected] = useState(false)
+  const [assignmentStatus, setAssignmentStatus] = useState(null)
   const socketRef = useRef(null)
   const activeChatKeyRef = useRef("")
   const activeChatDriverIdRef = useRef("")
@@ -455,6 +503,7 @@ export default function Bookings() {
   const openAssignmentModal = (booking) => {
     setAssignmentBooking(booking)
     setAssignmentError(null)
+    setAssignmentStatus(null)
     setDriverSearchTerm("")
   }
 
@@ -462,6 +511,7 @@ export default function Bookings() {
     if (assigningDriverId) return
     setAssignmentBooking(null)
     setAssignmentError(null)
+    setAssignmentStatus(null)
   }
 
   const handleAssignDriver = async (driver) => {
@@ -497,6 +547,15 @@ export default function Bookings() {
             }
           : current
       ))
+
+      const passengerEmail = getBookingPassengerEmail(assignmentBooking)
+      if (passengerEmail) {
+        const mailPayload = buildAssignmentEmail(assignmentBooking, driver)
+        await apiService.sendAdminMail(mailPayload)
+        setAssignmentStatus(`Assignment email sent to ${passengerEmail}.`)
+      } else {
+        setAssignmentStatus("Driver assigned, but no passenger email was available to notify.")
+      }
 
       setAssignmentBooking(null)
     } catch (err) {
@@ -1092,6 +1151,13 @@ export default function Bookings() {
               <div className="border-t border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" />
                 <span>{assignmentError}</span>
+              </div>
+            )}
+
+            {assignmentStatus && !assignmentError && (
+              <div className="border-t border-emerald-100 bg-emerald-50 px-5 py-3 text-sm text-emerald-700 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4" />
+                <span>{assignmentStatus}</span>
               </div>
             )}
           </div>

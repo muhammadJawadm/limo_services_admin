@@ -317,6 +317,14 @@ class ApiService {
   }
 
   /**
+   * Send an admin email
+   * POST /api/admin/send-mail
+   */
+  sendAdminMail({ to, subject, message }) {
+    return this.post('/api/admin/send-mail', { to, subject, message });
+  }
+
+  /**
    * Get all bookings
    * GET /api/admin/bookings
    */
