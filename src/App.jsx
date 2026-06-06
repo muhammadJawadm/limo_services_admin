@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react"
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom"
+import { Toaster } from "react-hot-toast"
 import Sidebar from "./components/Sidebar"
 import Header from "./components/Header"
+import SocketBootstrap from "./components/SocketBootstrap"
 
 import Dashboard from './pages/Dashboard'
 import Notifications from './pages/Notifications'
@@ -62,6 +64,18 @@ export default function App() {
     <AuthProvider>
       <OpsProvider>
         <BrowserRouter>
+          <SocketBootstrap />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: "transparent",
+                boxShadow: "none",
+                padding: 0,
+                margin: 0,
+              },
+            }}
+          />
           <Routes>
             <Route path="/login" element={<Login />} />
             
@@ -87,4 +101,3 @@ export default function App() {
     </AuthProvider>
   )
 }
-

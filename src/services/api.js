@@ -362,6 +362,18 @@ class ApiService {
       data: response.data.filter(user => user.role === 'customer'),
     };
   }
+/**
+ * Verify or unverify a driver
+ * PATCH /api/admin/drivers/:driverId/verify
+ */
+verifyDriver(driverId, isVerified) {
+  return this.request(`/api/driver/drivers/${driverId}/verify`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isVerified }),
+  });
+}
+
+  
 }
 
 // Export singleton instance

@@ -35,28 +35,58 @@ function normalizeSingleResponse(response) {
   if (!response) return null
   if (response.booking && typeof response.booking === "object") return response.booking
   if (response.data?.booking && typeof response.data.booking === "object") return response.data.booking
-  if (response.data && typeof response.data === "object" && !Array.isArray(response.data)) return response.data
   if (response.data?.data && typeof response.data.data === "object" && !Array.isArray(response.data.data)) return response.data.data
+  if (response.data && typeof response.data === "object" && !Array.isArray(response.data)) return response.data
   if (response.success && response.data && typeof response.data === "object") return response.data
   return null
 }
 
+function getBookerDetails(booking) {
+  return booking?.bookerDetails || {
+    firstName: booking?.bookerFirstName,
+    lastName: booking?.bookerLastName,
+    email: booking?.bookerEmail,
+    phone: booking?.bookerPhone,
+  }
+}
+
 function getPassengerName(booking) {
-  const firstName = booking?.passengerFirstName || booking?.user?.firstName || booking?.customer?.firstName || booking?.customer?.name?.split(" ")?.[0] || ""
-  const lastName = booking?.passengerLastName || booking?.user?.lastName || booking?.customer?.lastName || booking?.customer?.name?.split(" ").slice(1).join(" ") || ""
-  return `${firstName} ${lastName}`.trim() || booking?.passengerName || booking?.customer?.name || "Unknown passenger"
+  const booker = getBookerDetails(booking)
+
+  const firstName =
+    booker?.firstName ||
+    booking?.bookerFirstName ||
+    booking?.user?.firstName ||
+    booking?.customer?.firstName ||
+    booking?.customer?.name?.split(" ")?.[0] ||
+    ""
+
+  const lastName =
+    booker?.lastName ||
+    booking?.bookerLastName ||
+    booking?.user?.lastName ||
+    booking?.customer?.lastName ||
+    booking?.customer?.name?.split(" ").slice(1).join(" ") ||
+    ""
+
+  return (
+    `${firstName} ${lastName}`.trim() ||
+    booking?.bookerName ||
+    booking?.customer?.name ||
+    "Unknown customer"
+  )
 }
 
 function getBookingDateTime(booking) {
   const rawDate = booking?.pickupDateTime || booking?.date || booking?.createdAt || booking?.scheduledAt
-  if (!rawDate) return { dateText: "N/A", timeText: "" }
+  if (!rawDate) return { dateText: "N/A", timeText: booking?.time || "" }
 
   const parsed = new Date(rawDate)
-  if (Number.isNaN(parsed.getTime())) return { dateText: "N/A", timeText: "" }
+  if (Number.isNaN(parsed.getTime())) return { dateText: "N/A", timeText: booking?.time || "" }
 
   return {
     dateText: parsed.toLocaleDateString(),
-    timeText: parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    timeText: booking?.time || parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
   }
 }
 
@@ -70,72 +100,53 @@ function getBookingVehicleLabel(booking) {
 }
 
 function getBookingPassengerEmail(booking) {
-  return booking?.passengerEmail || booking?.user?.email || booking?.customer?.email || ""
+  const booker = getBookerDetails(booking)
+
+  return (
+    booker?.email ||
+    booking?.bookerEmail ||
+    booking?.user?.email ||
+    booking?.customer?.email ||
+    ""
+  )
 }
 
 function getBookingPassengerPhone(booking) {
-  return booking?.passengerPhone || booking?.user?.phone || booking?.customer?.phone || "N/A"
+  const booker = getBookerDetails(booking)
+
+  return (
+    booker?.phone ||
+    booking?.bookerPhone ||
+    booking?.user?.phone ||
+    booking?.customer?.phone ||
+    "N/A"
+  )
 }
 
-function buildAssignmentEmail(booking, driver) {
-  const passengerName = getPassengerName(booking)
-  const passengerEmail = getBookingPassengerEmail(booking)
-  const passengerPhone = getBookingPassengerPhone(booking)
-  const bookingNumber = booking?.confNumber || booking?.confirmationNumber || booking?.id || "N/A"
-  const dateInfo = getBookingDateTime(booking)
-  const pickupLocation = booking?.pickupLocation || booking?.pickupAddress || "N/A"
-  const dropoffLocation = booking?.dropoffLocation || booking?.dropoffAddress || "N/A"
-  const vehicleLabel = getBookingVehicleLabel(booking)
-  const driverName = getDriverName(driver)
-  const driverPhone = driver?.phone || driver?.user?.phone || "N/A"
-
-  return {
-    to: passengerEmail,
-    subject: `Driver assigned for booking ${bookingNumber}`,
-    message: [
-      `Hello ${passengerName},`,
-      "",
-      `A driver has been assigned to your booking ${bookingNumber}.`,
-      "",
-      `Booking details:`,
-      `- Booking number: ${bookingNumber}`,
-      `- Pickup: ${pickupLocation}`,
-      `- Dropoff: ${dropoffLocation}`,
-      `- Date: ${dateInfo.dateText}${dateInfo.timeText ? ` at ${dateInfo.timeText}` : ""}`,
-      `- Vehicle class: ${vehicleLabel}`,
-      `- Passenger phone: ${passengerPhone}`,
-      "",
-      `Assigned driver:`,
-      `- Name: ${driverName}`,
-      `- Phone: ${driverPhone}`,
-      `- Company: ${driver?.companyName || driver?.company || "N/A"}`,
-      `- Location: ${driver?.location || driver?.user?.location || "N/A"}`,
-      "",
-      "If you need any help, please contact the admin team.",
-    ].join("\n"),
-  }
-}
-
-function getBookingRequirementSummary(booking) {
-  return {
-    vehicleClass: getBookingVehicleLabel(booking),
-    passengers: Number(booking?.noOfPassengers ?? booking?.passengerCount ?? 0),
-    luggage: Number(booking?.luggage ?? booking?.luggageCount ?? 0),
-    pickupLocation: booking?.pickupLocation || booking?.pickupAddress || "N/A",
-    dropoffLocation: booking?.dropoffLocation || booking?.dropoffAddress || "N/A",
-    status: booking?.rideStatus || "unknown",
-    paymentStatus: booking?.paymentStatus || "unknown",
-  }
+function getStopText(stop) {
+  if (!stop) return ""
+  if (typeof stop === "string") return stop
+  return stop.location || stop.address || stop.name || ""
 }
 
 function getDriverName(driver) {
   const user = driver?.user || {}
+
   return (
+    driver?.fullName ||
     `${driver?.firstName || user.firstName || ""} ${driver?.lastName || user.lastName || ""}`.trim() ||
     driver?.name ||
     user.name ||
     "Unknown driver"
   )
+}
+
+function getDriverPhone(driver) {
+  return driver?.phone || driver?.user?.phone || "N/A"
+}
+
+function getDriverEmail(driver) {
+  return driver?.email || driver?.user?.email || "N/A"
 }
 
 function getDriverVehicleLabel(driver) {
@@ -157,6 +168,56 @@ function getDriverCapacity(driver) {
 
 function getDriverUserId(driver) {
   return driver?.user?.id || driver?.userId || driver?.user?._id || driver?.user?.userId || driver?.id || driver?._id || null
+}
+
+function buildAssignmentEmail(booking, driver) {
+  const passengerName = getPassengerName(booking)
+  const passengerEmail = getBookingPassengerEmail(booking)
+  const passengerPhone = getBookingPassengerPhone(booking)
+  const bookingNumber = booking?.confNumber || booking?.confirmationNumber || booking?.id || "N/A"
+  const dateInfo = getBookingDateTime(booking)
+  const pickupLocation = booking?.pickupLocation || booking?.pickupAddress || "N/A"
+  const dropoffLocation = booking?.dropoffLocation || booking?.dropoffAddress || "N/A"
+  const vehicleLabel = getBookingVehicleLabel(booking)
+  const driverName = getDriverName(driver)
+  const driverPhone = getDriverPhone(driver)
+
+  return {
+    to: passengerEmail,
+    subject: `Driver assigned for booking ${bookingNumber}`,
+    message: [
+      `Hello ${passengerName},`,
+      "",
+      `A driver has been assigned to your booking ${bookingNumber}.`,
+      "",
+      `Booking details:`,
+      `- Booking number: ${bookingNumber}`,
+      `- Pickup: ${pickupLocation}`,
+      `- Dropoff: ${dropoffLocation}`,
+      `- Date: ${dateInfo.dateText}${dateInfo.timeText ? ` at ${dateInfo.timeText}` : ""}`,
+      `- Vehicle class: ${vehicleLabel}`,
+      `- Contact phone: ${passengerPhone}`,
+      "",
+      `Assigned driver:`,
+      `- Name: ${driverName}`,
+      `- Phone: ${driverPhone}`,
+      `- Email: ${getDriverEmail(driver)}`,
+      "",
+      "If you need any help, please contact the admin team.",
+    ].join("\n"),
+  }
+}
+
+function getBookingRequirementSummary(booking) {
+  return {
+    vehicleClass: getBookingVehicleLabel(booking),
+    passengers: Number(booking?.noOfPassengers ?? booking?.passengerCount ?? 0),
+    luggage: Number(booking?.luggage ?? booking?.luggageCount ?? 0),
+    pickupLocation: booking?.pickupLocation || booking?.pickupAddress || "N/A",
+    dropoffLocation: booking?.dropoffLocation || booking?.dropoffAddress || "N/A",
+    status: booking?.rideStatus || "unknown",
+    paymentStatus: booking?.paymentStatus || "unknown",
+  }
 }
 
 function normalizeChatMessages(response) {
@@ -211,8 +272,10 @@ function evaluateDriverFit(booking, driver) {
   checks.push({ label: "Onboarded", ok: onboardingComplete !== false })
 
   const available = driver?.available ?? driver?.user?.available
+  const status = String(driver?.status || driver?.user?.status || "").toLowerCase()
   const notAvailableStatus = ["offline", "unavailable", "on trip", "on_trip"]
   const availabilityOk = available !== false && !notAvailableStatus.includes(status)
+
   if (!availabilityOk) reasons.push("Driver is currently unavailable")
   score += availabilityOk ? 10 : 0
   checks.push({ label: "Available", ok: availabilityOk })
@@ -229,12 +292,18 @@ function StatusBadge({ status }) {
   const styles = {
     completed: "bg-green-100 text-green-700",
     upcoming: "bg-blue-100 text-blue-700",
+    confirmed: "bg-indigo-100 text-indigo-700",
     assigned: "bg-indigo-100 text-indigo-700",
     cancelled: "bg-red-100 text-red-700",
+    ongoing: "bg-amber-100 text-amber-700",
     in_progress: "bg-amber-100 text-amber-700",
   }
 
-  return <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${styles[status] || "bg-slate-100 text-slate-700"}`}>{status || "unknown"}</span>
+  return (
+    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${styles[status] || "bg-slate-100 text-slate-700"}`}>
+      {status || "unknown"}
+    </span>
+  )
 }
 
 export default function Bookings() {
@@ -330,9 +399,12 @@ export default function Bookings() {
 
       setChatMessages((currentMessages) => {
         const nextMessageId = getMessageId(message)
+
         if (nextMessageId && currentMessages.some((existingMessage) => String(getMessageId(existingMessage)) === String(nextMessageId))) {
           return currentMessages.map((existingMessage) =>
-            String(getMessageId(existingMessage)) === String(nextMessageId) ? { ...existingMessage, ...message } : existingMessage
+            String(getMessageId(existingMessage)) === String(nextMessageId)
+              ? { ...existingMessage, ...message }
+              : existingMessage
           )
         }
 
@@ -381,6 +453,7 @@ export default function Bookings() {
         setChatError(null)
 
         const response = await apiService.getDriverChatMessages(selectedChatDriverUserId)
+
         if (activeChatKeyRef.current !== requestKey) return
 
         setChatMessages(normalizeChatMessages(response))
@@ -417,24 +490,30 @@ export default function Bookings() {
 
     try {
       const socket = socketRef.current
+
       if (socket?.connected) {
         socket.emit("admin_send_message", { driverUserId: selectedChatDriverUserId, text })
         setChatStatus("Message sent to driver.")
       } else {
         const response = await apiService.sendDriverChatMessage(selectedChatDriverUserId, text)
         const persistedMessage = response?.data || response
+
         if (persistedMessage) {
           setChatMessages((currentMessages) => {
             const messageId = getMessageId(persistedMessage)
+
             if (messageId && currentMessages.some((message) => String(getMessageId(message)) === String(messageId))) {
               return currentMessages.map((message) =>
-                String(getMessageId(message)) === String(messageId) ? { ...message, ...persistedMessage } : message
+                String(getMessageId(message)) === String(messageId)
+                  ? { ...message, ...persistedMessage }
+                  : message
               )
             }
 
             return [...currentMessages, persistedMessage]
           })
         }
+
         setChatStatus("Message sent to driver.")
       }
 
@@ -456,11 +535,15 @@ export default function Bookings() {
 
   const filteredBookings = useMemo(() => {
     const search = searchTerm.trim().toLowerCase()
+
     return bookings.filter((booking) => {
       const passengerName = getPassengerName(booking)
       const pickupLocation = booking?.pickupLocation || booking?.pickupAddress || ""
       const dropoffLocation = booking?.dropoffLocation || booking?.dropoffAddress || ""
       const confirmation = booking?.confNumber || booking?.confirmationNumber || booking?.id || ""
+      const email = getBookingPassengerEmail(booking)
+      const phone = getBookingPassengerPhone(booking)
+      const driverName = booking?.assignedDriver ? getDriverName(booking.assignedDriver) : ""
 
       const matchesSearch =
         !search ||
@@ -468,8 +551,9 @@ export default function Bookings() {
         pickupLocation.toLowerCase().includes(search) ||
         dropoffLocation.toLowerCase().includes(search) ||
         passengerName.toLowerCase().includes(search) ||
-        String(booking?.passengerEmail || booking?.user?.email || booking?.customer?.email || "").toLowerCase().includes(search) ||
-        String(booking?.passengerPhone || booking?.user?.phone || booking?.customer?.phone || "").includes(search)
+        String(email).toLowerCase().includes(search) ||
+        String(phone).includes(search) ||
+        driverName.toLowerCase().includes(search)
 
       const matchesStatus = filterStatus === "all" || booking?.rideStatus === filterStatus
 
@@ -489,10 +573,12 @@ export default function Bookings() {
       })
       .filter(({ driver }) => {
         if (!search) return true
+
         const name = getDriverName(driver).toLowerCase()
         const vehicle = getDriverVehicleLabel(driver).toLowerCase()
-        const company = String(driver?.companyName || "").toLowerCase()
+        const company = String(driver?.companyName || driver?.user?.companyName || "").toLowerCase()
         const location = String(driver?.location || driver?.user?.location || "").toLowerCase()
+
         return name.includes(search) || vehicle.includes(search) || company.includes(search) || location.includes(search)
       })
       .sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.score - a.score || getDriverName(a.driver).localeCompare(getDriverName(b.driver)))
@@ -524,37 +610,42 @@ export default function Bookings() {
       const response = await apiService.assignDriverToBooking(assignmentBooking.id, driver.id)
       const updatedBooking = normalizeSingleResponse(response)
 
-      setBookings((current) => current.map((booking) => {
-        if (booking.id !== assignmentBooking.id) return booking
+      const nextAssignedDriver = updatedBooking?.assignedDriver || driver
 
-        return {
-          ...booking,
-          ...(updatedBooking || {}),
-          driverId: driver.id,
-          assignedDriver: driver,
-          rideStatus: updatedBooking?.rideStatus || "assigned",
-        }
-      }))
+      setBookings((current) =>
+        current.map((booking) => {
+          if (booking.id !== assignmentBooking.id) return booking
 
-      setSelectedBooking((current) => (
+          return {
+            ...booking,
+            ...(updatedBooking || {}),
+            driverId: getDriverUserId(nextAssignedDriver),
+            assignedDriver: nextAssignedDriver,
+            rideStatus: updatedBooking?.rideStatus || "upcoming",
+          }
+        })
+      )
+
+      setSelectedBooking((current) =>
         current?.id === assignmentBooking.id
           ? {
               ...current,
               ...(updatedBooking || {}),
-              driverId: driver.id,
-              assignedDriver: driver,
-              rideStatus: updatedBooking?.rideStatus || "assigned",
+              driverId: getDriverUserId(nextAssignedDriver),
+              assignedDriver: nextAssignedDriver,
+              rideStatus: updatedBooking?.rideStatus || "upcoming",
             }
           : current
-      ))
+      )
 
       const passengerEmail = getBookingPassengerEmail(assignmentBooking)
+
       if (passengerEmail) {
-        const mailPayload = buildAssignmentEmail(assignmentBooking, driver)
+        const mailPayload = buildAssignmentEmail(assignmentBooking, nextAssignedDriver)
         await apiService.sendAdminMail(mailPayload)
         setAssignmentStatus(`Assignment email sent to ${passengerEmail}.`)
       } else {
-        setAssignmentStatus("Driver assigned, but no passenger email was available to notify.")
+        setAssignmentStatus("Driver assigned, but no customer email was available to notify.")
       }
 
       setAssignmentBooking(null)
@@ -640,7 +731,7 @@ export default function Bookings() {
         <div className="panel p-5 space-y-4">
           <input
             type="text"
-            placeholder="Search by confirmation #, location, name, email, or phone..."
+            placeholder="Search by confirmation #, location, name, email, phone, or driver..."
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]/10 transition-all"
@@ -650,13 +741,17 @@ export default function Bookings() {
             {[
               ["all", "All Bookings", "bg-[var(--brand-primary)] text-white"],
               ["upcoming", "Upcoming", "bg-blue-600 text-white"],
+              ["confirmed", "Confirmed", "bg-indigo-600 text-white"],
+              ["ongoing", "Ongoing", "bg-amber-600 text-white"],
               ["completed", "Completed", "bg-green-600 text-white"],
               ["cancelled", "Cancelled", "bg-red-600 text-white"],
             ].map(([value, label, activeClass]) => (
               <button
                 key={value}
                 onClick={() => setFilterStatus(value)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filterStatus === value ? activeClass : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  filterStatus === value ? activeClass : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
               >
                 {label}
               </button>
@@ -671,6 +766,8 @@ export default function Bookings() {
             {filteredBookings.map((booking) => {
               const isExpanded = selectedBooking?.id === booking.id
               const passengerName = getPassengerName(booking)
+              const passengerEmail = getBookingPassengerEmail(booking)
+              const passengerPhone = getBookingPassengerPhone(booking)
               const dateInfo = getBookingDateTime(booking)
               const pickupLocation = booking?.pickupLocation || booking?.pickupAddress || "N/A"
               const dropoffLocation = booking?.dropoffLocation || booking?.dropoffAddress || "N/A"
@@ -687,7 +784,9 @@ export default function Bookings() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-lg font-semibold text-slate-900">{booking.confNumber || booking.confirmationNumber || booking.id}</h3>
+                        <h3 className="text-lg font-semibold text-slate-900">
+                          {booking.confNumber || booking.confirmationNumber || booking.id}
+                        </h3>
                         <StatusBadge status={booking.rideStatus} />
                       </div>
 
@@ -703,20 +802,28 @@ export default function Bookings() {
 
                       <div className="flex items-center gap-2 text-slate-600 mt-1">
                         <Calendar className="w-4 h-4 flex-shrink-0" />
-                        <span className="text-sm">{dateInfo.dateText}{dateInfo.timeText ? ` at ${dateInfo.timeText}` : ""}</span>
+                        <span className="text-sm">
+                          {dateInfo.dateText}{dateInfo.timeText ? ` at ${dateInfo.timeText}` : ""}
+                        </span>
                       </div>
                     </div>
 
                     <div className="text-right space-y-2">
                       <div className="text-sm">
                         <p className="text-slate-500 text-xs">Amount</p>
-                        <p className="text-xl font-bold text-slate-900">{formatMoney(booking.totalAmount || booking.tripPrice)}</p>
+                        <p className="text-xl font-bold text-slate-900">
+                          {formatMoney(booking.totalAmount || booking.tripPrice)}
+                        </p>
                       </div>
+
                       <div className="text-sm">
-                        <span className={`px-2.5 py-1 rounded text-xs font-semibold ${booking.paymentStatus === "paid" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                        <span className={`px-2.5 py-1 rounded text-xs font-semibold ${
+                          booking.paymentStatus === "paid" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                        }`}>
                           {booking.paymentStatus || "unpaid"}
                         </span>
                       </div>
+
                       <button
                         onClick={(event) => {
                           event.stopPropagation()
@@ -724,7 +831,7 @@ export default function Bookings() {
                         }}
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--brand-primary)] text-white text-xs font-semibold shadow-sm hover:opacity-95 transition-all"
                       >
-                        {booking.assignedDriver || booking.driverId ? "Change Driver" : "Assign Driver"}
+                        {assignedDriver ? "Change Driver" : "Assign Driver"}
                       </button>
                     </div>
                   </div>
@@ -734,17 +841,26 @@ export default function Bookings() {
                       <p className="text-xs text-slate-500 uppercase tracking-wide">Vehicle</p>
                       <p className="text-sm font-semibold text-slate-900 mt-1 truncate">{vehicleName}</p>
                     </div>
+
                     <div className="rounded-lg bg-slate-50 p-3">
                       <p className="text-xs text-slate-500 uppercase tracking-wide">Passengers</p>
-                      <p className="text-sm font-semibold text-slate-900 mt-1">{booking.noOfPassengers ?? booking.passengerCount ?? "N/A"}</p>
+                      <p className="text-sm font-semibold text-slate-900 mt-1">
+                        {booking.noOfPassengers ?? booking.passengerCount ?? "N/A"}
+                      </p>
                     </div>
+
                     <div className="rounded-lg bg-slate-50 p-3">
                       <p className="text-xs text-slate-500 uppercase tracking-wide">Luggage</p>
-                      <p className="text-sm font-semibold text-slate-900 mt-1">{booking.luggage ?? booking.luggageCount ?? "N/A"}</p>
+                      <p className="text-sm font-semibold text-slate-900 mt-1">
+                        {booking.luggage ?? booking.luggageCount ?? "N/A"}
+                      </p>
                     </div>
+
                     <div className="rounded-lg bg-slate-50 p-3">
                       <p className="text-xs text-slate-500 uppercase tracking-wide">Driver</p>
-                      <p className="text-sm font-semibold text-slate-900 mt-1 truncate">{assignedDriver ? getDriverName(assignedDriver) : "Unassigned"}</p>
+                      <p className="text-sm font-semibold text-slate-900 mt-1 truncate">
+                        {assignedDriver ? getDriverName(assignedDriver) : "Unassigned"}
+                      </p>
                     </div>
                   </div>
 
@@ -753,19 +869,21 @@ export default function Bookings() {
                       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
                         <div className="space-y-4 min-w-0">
                           <div>
-                            <h4 className="text-sm font-semibold text-slate-900 mb-2">Passenger Information</h4>
+                            <h4 className="text-sm font-semibold text-slate-900 mb-2">Booker Information</h4>
                             <div className="grid grid-cols-2 gap-2 text-sm">
                               <div>
                                 <p className="text-slate-500">Name</p>
                                 <p className="font-medium text-slate-900 mt-0.5">{passengerName}</p>
                               </div>
+
                               <div>
                                 <p className="text-slate-500">Phone</p>
-                                <p className="font-medium text-slate-900 mt-0.5">{booking.passengerPhone || booking.user?.phone || booking.customer?.phone || "N/A"}</p>
+                                <p className="font-medium text-slate-900 mt-0.5">{passengerPhone}</p>
                               </div>
+
                               <div className="col-span-2 flex items-center gap-2 text-sm text-slate-900">
                                 <Mail className="w-4 h-4 text-slate-500" />
-                                <span>{booking.passengerEmail || booking.user?.email || booking.customer?.email || "N/A"}</span>
+                                <span>{passengerEmail || "N/A"}</span>
                               </div>
                             </div>
                           </div>
@@ -777,16 +895,20 @@ export default function Bookings() {
                                 <p className="text-slate-500">Pickup</p>
                                 <p className="font-medium text-slate-900 mt-0.5">{pickupLocation}</p>
                               </div>
+
                               <div>
                                 <p className="text-slate-500">Dropoff</p>
                                 <p className="font-medium text-slate-900 mt-0.5">{dropoffLocation}</p>
                               </div>
+
                               {stopLocations.length > 0 && (
                                 <div className="col-span-2">
                                   <p className="text-slate-500">Stop Locations</p>
                                   <div className="space-y-1 mt-1">
                                     {stopLocations.map((stop, index) => (
-                                      <p key={stop.id || `${stop.location}-${index}`} className="font-medium text-slate-900">• {stop.location || stop.address || stop.name}</p>
+                                      <p key={stop?.id || `${getStopText(stop)}-${index}`} className="font-medium text-slate-900">
+                                        • {getStopText(stop)}
+                                      </p>
                                     ))}
                                   </div>
                                 </div>
@@ -799,23 +921,28 @@ export default function Bookings() {
                               <DollarSign className="w-4 h-4" />
                               Payment & Breakdown
                             </h4>
+
                             <div className="grid grid-cols-2 gap-2 text-sm">
                               <div>
                                 <p className="text-slate-500">Trip Price</p>
                                 <p className="font-medium text-slate-900 mt-0.5">{formatMoney(booking.tripPrice)}</p>
                               </div>
+
                               <div>
                                 <p className="text-slate-500">Platform Fee</p>
                                 <p className="font-medium text-slate-900 mt-0.5">{formatMoney(booking.platformFee)}</p>
                               </div>
+
                               <div>
                                 <p className="text-slate-500">Child Seats Fee</p>
                                 <p className="font-medium text-slate-900 mt-0.5">{formatMoney(booking.childSeatsFee)}</p>
                               </div>
+
                               <div>
                                 <p className="text-slate-500">Other Fees</p>
                                 <p className="font-medium text-slate-900 mt-0.5">{formatMoney(booking.otherFees)}</p>
                               </div>
+
                               <div className="col-span-2 border-t pt-2 mt-2">
                                 <p className="text-slate-500">Driver Receives</p>
                                 <p className="font-semibold text-green-700 mt-0.5">{formatMoney(booking.driverAmount)}</p>
@@ -831,17 +958,15 @@ export default function Bookings() {
                                   <p className="text-slate-500">Name</p>
                                   <p className="font-medium text-slate-900 mt-0.5">{getDriverName(assignedDriver)}</p>
                                 </div>
+
                                 <div>
                                   <p className="text-slate-500">Phone</p>
-                                  <p className="font-medium text-slate-900 mt-0.5">{assignedDriver.phone || assignedDriver.user?.phone || "N/A"}</p>
+                                  <p className="font-medium text-slate-900 mt-0.5">{getDriverPhone(assignedDriver)}</p>
                                 </div>
-                                <div>
-                                  <p className="text-slate-500">Company</p>
-                                  <p className="font-medium text-slate-900 mt-0.5">{assignedDriver.companyName || "N/A"}</p>
-                                </div>
-                                <div>
-                                  <p className="text-slate-500">Location</p>
-                                  <p className="font-medium text-slate-900 mt-0.5">{assignedDriver.location || assignedDriver.user?.location || "N/A"}</p>
+
+                                <div className="col-span-2">
+                                  <p className="text-slate-500">Email</p>
+                                  <p className="font-medium text-slate-900 mt-0.5">{getDriverEmail(assignedDriver)}</p>
                                 </div>
                               </div>
                             </div>
@@ -856,7 +981,9 @@ export default function Bookings() {
                                 <h4 className="mt-1 text-lg font-semibold text-slate-900">{selectedChatDriverLabel}</h4>
                                 <p className="mt-1 text-xs leading-5 text-slate-500">Assigned driver conversation for this booking.</p>
                               </div>
-                              <span className={`mt-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${socketConnected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                              <span className={`mt-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                socketConnected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                              }`}>
                                 {socketConnected ? "Connected" : "Offline"}
                               </span>
                             </div>
@@ -897,7 +1024,11 @@ export default function Bookings() {
                                     return (
                                       <div
                                         key={messageId}
-                                        className={`rounded-3xl px-3.5 py-3 text-sm shadow-sm ${fromAdmin ? "ml-auto max-w-[88%] bg-sky-500 text-white" : "mr-auto max-w-[88%] bg-white text-slate-800 border border-sky-100"}`}
+                                        className={`rounded-3xl px-3.5 py-3 text-sm shadow-sm ${
+                                          fromAdmin
+                                            ? "ml-auto max-w-[88%] bg-sky-500 text-white"
+                                            : "mr-auto max-w-[88%] bg-white text-slate-800 border border-sky-100"
+                                        }`}
                                       >
                                         <div className="mb-1 flex items-center justify-between gap-3 text-[11px] opacity-75">
                                           <span>{fromAdmin ? "Admin" : message.sender?.firstName || message.sender?.name || "Driver"}</span>
@@ -915,25 +1046,22 @@ export default function Bookings() {
                               </div>
                             </div>
 
-                            <form className="flex mt-4 space-y-1" onSubmit={sendDriverMessage}>
+                            <form className="flex mt-4 gap-2" onSubmit={sendDriverMessage}>
                               <textarea
                                 value={chatInput}
                                 onChange={(event) => setChatInput(event.target.value)}
                                 rows="1"
                                 placeholder="Type a message to the driver..."
                                 className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-sky-400"
-                              
                               />
-                              <div className="flex items-center justify-between gap-3">
-                                {/* <p className="text-xs leading-5 text-slate-500">You chat is lived</p> */}
-                                <button
-                                  type="submit"
-                                  disabled={chatSending || !selectedChatDriverUserId || !chatInput.trim()}
-                                  className="inline-flex items-center gap-2 rounded-3xl bg-sky-600 px-4 py-3.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  {chatSending ? "Sending..." : "Send"}
-                                </button>
-                              </div>
+
+                              <button
+                                type="submit"
+                                disabled={chatSending || !selectedChatDriverUserId || !chatInput.trim()}
+                                className="inline-flex items-center gap-2 rounded-3xl bg-sky-600 px-4 py-3.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {chatSending ? "Sending..." : "Send"}
+                              </button>
                             </form>
                           </div>
                         </aside>
@@ -958,8 +1086,14 @@ export default function Bookings() {
       </section>
 
       {assignmentBooking && assignmentRequirements && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm p-4 flex items-center justify-center" onClick={closeAssignmentModal}>
-          <div className="w-full max-w-7xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div
+  className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm p-4 flex items-center justify-center overflow-y-auto"
+  onClick={closeAssignmentModal}
+>
+  <div
+    className="w-full max-w-7xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl flex flex-col"
+    onClick={(event) => event.stopPropagation()}
+  >
             <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4">
               <div>
                 <p className="text-xs uppercase tracking-wide text-slate-500">Manual driver assignment</p>
@@ -967,6 +1101,7 @@ export default function Bookings() {
                   Assign driver to {assignmentBooking.confNumber || assignmentBooking.confirmationNumber || assignmentBooking.id}
                 </h3>
               </div>
+
               <button
                 onClick={closeAssignmentModal}
                 className="w-9 h-9 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-all grid place-items-center"
@@ -975,8 +1110,8 @@ export default function Bookings() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] max-h-[calc(90vh-73px)] overflow-hidden">
-              <aside className="overflow-y-auto border-r border-slate-100 p-5 space-y-4 bg-slate-50/60">
+            <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] flex-1 min-h-0 overflow-hidden">
+              <aside className="max-h-[calc(90vh-73px)] overflow-y-auto border-r border-slate-100 p-5 space-y-4 bg-slate-50/60">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900">Booking requirements</h4>
                   <p className="text-xs text-slate-500 mt-1">Choose a driver who matches the ride requirements below.</p>
@@ -987,14 +1122,17 @@ export default function Bookings() {
                     <p className="text-xs text-slate-500 uppercase tracking-wide">Vehicle class</p>
                     <p className="font-semibold text-slate-900 mt-1">{assignmentRequirements.vehicleClass}</p>
                   </div>
+
                   <div className="rounded-2xl bg-white p-3 border border-slate-100">
                     <p className="text-xs text-slate-500 uppercase tracking-wide">Passengers</p>
                     <p className="font-semibold text-slate-900 mt-1">{assignmentRequirements.passengers || "N/A"}</p>
                   </div>
+
                   <div className="rounded-2xl bg-white p-3 border border-slate-100">
                     <p className="text-xs text-slate-500 uppercase tracking-wide">Luggage</p>
                     <p className="font-semibold text-slate-900 mt-1">{assignmentRequirements.luggage || "N/A"}</p>
                   </div>
+
                   <div className="rounded-2xl bg-white p-3 border border-slate-100">
                     <p className="text-xs text-slate-500 uppercase tracking-wide">Status</p>
                     <p className="font-semibold text-slate-900 mt-1">{assignmentRequirements.status}</p>
@@ -1006,10 +1144,12 @@ export default function Bookings() {
                     <p className="text-xs text-slate-500 uppercase tracking-wide">Pickup</p>
                     <p className="font-medium text-slate-900 mt-1">{assignmentRequirements.pickupLocation}</p>
                   </div>
+
                   <div>
                     <p className="text-xs text-slate-500 uppercase tracking-wide">Dropoff</p>
                     <p className="font-medium text-slate-900 mt-1">{assignmentRequirements.dropoffLocation}</p>
                   </div>
+
                   <div>
                     <p className="text-xs text-slate-500 uppercase tracking-wide">Payment status</p>
                     <p className="font-medium text-slate-900 mt-1">{assignmentRequirements.paymentStatus}</p>
@@ -1030,7 +1170,7 @@ export default function Bookings() {
                 )}
               </aside>
 
-              <section className="overflow-y-auto p-5 space-y-4">
+             <section className="max-h-[calc(90vh-73px)] overflow-y-auto p-5 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="relative flex-1 max-w-xl">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1041,6 +1181,7 @@ export default function Bookings() {
                       className="w-full rounded-xl border border-slate-200 pl-9 pr-3 py-2.5 text-sm outline-none focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]/10 transition-all"
                     />
                   </div>
+
                   <div className="text-sm text-slate-500">
                     {assignmentDrivers.length} driver(s) shown
                   </div>
@@ -1066,19 +1207,26 @@ export default function Bookings() {
                       return (
                         <article
                           key={driver.id}
-                          className={`rounded-2xl border p-4 transition-all ${eligible ? "border-emerald-200 bg-emerald-50/40" : "border-slate-200 bg-white"}`}
+                          className={`rounded-2xl border p-4 transition-all ${
+                            eligible ? "border-emerald-200 bg-emerald-50/40" : "border-slate-200 bg-white"
+                          }`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <h4 className="text-base font-semibold text-slate-900">{driverName}</h4>
-                              <p className="text-sm text-slate-500 mt-1">{driver.companyName || driver.company || "Independent driver"} · {driver.location || driver.user?.location || "Location not listed"}</p>
+                              <p className="text-sm text-slate-500 mt-1">
+                                {driver.companyName || driver.user?.companyName || "Independent driver"} · {driver.location || driver.user?.location || "Location not listed"}
+                              </p>
+
                               <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
                                 <span className={`px-2 py-1 rounded-full ${verification ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
                                   {verification ? "Verified" : "Unverified"}
                                 </span>
+
                                 <span className={`px-2 py-1 rounded-full ${available !== false ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-700"}`}>
                                   {available !== false ? "Available" : "Unavailable"}
                                 </span>
+
                                 <span className={`px-2 py-1 rounded-full ${onboarded ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-700"}`}>
                                   {onboarded ? "Onboarded" : "Pending onboarding"}
                                 </span>
@@ -1096,24 +1244,32 @@ export default function Bookings() {
                               <p className="text-xs text-slate-500 uppercase tracking-wide">Vehicle</p>
                               <p className="font-semibold text-slate-900 mt-1">{vehicleLabel}</p>
                             </div>
+
                             <div className="rounded-xl bg-white border border-slate-100 p-3">
                               <p className="text-xs text-slate-500 uppercase tracking-wide">Class</p>
                               <p className="font-semibold text-slate-900 mt-1">{driver.vehicleClass || driver.vehicle?.classType || "N/A"}</p>
                             </div>
+
                             <div className="rounded-xl bg-white border border-slate-100 p-3">
                               <p className="text-xs text-slate-500 uppercase tracking-wide">Capacity</p>
                               <p className="font-semibold text-slate-900 mt-1">{vehicleCapacity.passengers || "N/A"} pax · {vehicleCapacity.luggage || "N/A"} bags</p>
                             </div>
+
                             <div className="rounded-xl bg-white border border-slate-100 p-3">
                               <p className="text-xs text-slate-500 uppercase tracking-wide">Phone</p>
-                              <p className="font-semibold text-slate-900 mt-1">{driver.phone || driver.user?.phone || "N/A"}</p>
+                              <p className="font-semibold text-slate-900 mt-1">{getDriverPhone(driver)}</p>
                             </div>
                           </div>
 
                           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                             <div className="flex flex-wrap gap-2 text-xs">
                               {checks.map((check) => (
-                                <span key={check.label} className={`px-2.5 py-1 rounded-full inline-flex items-center gap-1 ${check.ok ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                                <span
+                                  key={check.label}
+                                  className={`px-2.5 py-1 rounded-full inline-flex items-center gap-1 ${
+                                    check.ok ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+                                  }`}
+                                >
                                   {check.ok ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
                                   {check.label}
                                 </span>
@@ -1123,7 +1279,11 @@ export default function Bookings() {
                             <button
                               onClick={() => handleAssignDriver(driver)}
                               disabled={!eligible || assigningDriverId === driver.id}
-                              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${eligible ? "bg-[var(--brand-primary)] text-white hover:opacity-95" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
+                              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                                eligible
+                                  ? "bg-[var(--brand-primary)] text-white hover:opacity-95"
+                                  : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                              }`}
                             >
                               {assigningDriverId === driver.id ? "Assigning..." : eligible ? "Assign driver" : "Basic requirement missing"}
                             </button>

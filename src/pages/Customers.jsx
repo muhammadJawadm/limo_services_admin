@@ -169,12 +169,7 @@ export default function Customers() {
                     {customer.isVerified ? "Verified" : "Unverified"}
                   </p>
                 </div>
-                <div className="rounded-lg bg-slate-50 p-2.5">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">Onboarding</p>
-                  <p className="text-sm font-semibold text-slate-900 mt-0.5">
-                    {customer.onboardingCompleted ? "Completed" : "Pending"}
-                  </p>
-                </div>
+           
               </div>
 
               {/* Expanded Details */}
