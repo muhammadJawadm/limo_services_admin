@@ -86,6 +86,12 @@ export function useNotificationSocket() {
     }
 
     const handleAdminNewMessage = (message) => {
+      // sender._id === driverUserId → driver sent it → show toast
+      // sender._id !== driverUserId → admin echo → skip toast
+      const senderId = String(message?.sender?._id || message?.sender?.id || "")
+      const driverUserId = String(message?.driverUserId || message?.meta?.driverUserId || "")
+      if (senderId && driverUserId && senderId !== driverUserId) return
+
       const senderName =
         [message?.sender?.firstName, message?.sender?.lastName]
           .filter(Boolean)
