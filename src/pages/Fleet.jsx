@@ -27,7 +27,8 @@ const initialFormState = {
   passengers: "5",
   luggage: "3",
   baseFare: "75",
-  perMileRate: "3.5",
+  perMileRate30: "3.5",
+  perMileRate40: "2.5",
   pictureFile: null,
 }
 
@@ -125,11 +126,16 @@ export default function Fleet() {
       payload.append("type", form.type)
       payload.append("classification", form.classification)
       payload.append("baseFare", form.baseFare)
-      payload.append("perMileRate", form.perMileRate)
-      
+      payload.append("perMileRate30", form.perMileRate30)
+      payload.append("perMileRate40", form.perMileRate40)
+
       const passengersInt = Math.max(1, parseInt(form.passengers, 10) || 1)
       const luggageInt = Math.max(0, parseInt(form.luggage, 10) || 0)
-      
+
+      payload.append("passengers", passengersInt)
+      payload.append("luggage", luggageInt)
+      payload.append("passengerCapacity", passengersInt)
+      payload.append("luggageCapacity", luggageInt)
       payload.append("capacity", JSON.stringify({ passengers: passengersInt, luggage: luggageInt }))
       payload.append("picture", form.pictureFile, form.pictureFile.name)
 
@@ -452,13 +458,25 @@ export default function Fleet() {
                   </label>
 
                   <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-700">Per mile rate</span>
+                    <span className="font-semibold text-slate-700">Per mile rate (up to 30 mi)</span>
                     <input
                       type="number"
                       min="0"
                       step="0.01"
-                      value={form.perMileRate}
-                      onChange={(event) => handleFieldChange("perMileRate", event.target.value)}
+                      value={form.perMileRate30}
+                      onChange={(event) => handleFieldChange("perMileRate30", event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 outline-none focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]/10 transition-all"
+                    />
+                  </label>
+
+                  <label className="space-y-2 text-sm">
+                    <span className="font-semibold text-slate-700">Per mile rate (above 40 mi)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.perMileRate40}
+                      onChange={(event) => handleFieldChange("perMileRate40", event.target.value)}
                       className="w-full rounded-xl border border-slate-200 px-4 py-2.5 outline-none focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]/10 transition-all"
                     />
                   </label>
@@ -468,6 +486,7 @@ export default function Fleet() {
                   <p className="font-semibold text-slate-900">Payload preview</p>
                   <p><span className="text-slate-500">Name:</span> {form.name || "Haval H6 PHEV"}</p>
                   <p><span className="text-slate-500">Capacity:</span> {form.passengers} passengers · {form.luggage} luggage</p>
+                  <p><span className="text-slate-500">Rates:</span> ${form.perMileRate30}/mi (≤30) · ${form.perMileRate40}/mi (40+)</p>
                   <p><span className="text-slate-500">Image:</span> {form.pictureFile ? form.pictureFile.name : "No file selected"}</p>
                 </div>
 
@@ -485,9 +504,9 @@ export default function Fleet() {
                   <p className="text-xs text-slate-500 mt-0.5">Upload image for the vehicle category.</p>
                 </div>
 
-                <div className="relative h-12 rounded-2xl overflow-hidden border border-slate-200 bg-white flex items-center justify-center">
+                <div className="relative h-48 rounded-2xl overflow-hidden border border-slate-200 bg-white flex items-center justify-center">
                   {picturePreview ? (
-                    <img src={picturePreview} alt="Vehicle preview" className="w-full h-12 object-cover" />
+                    <img src={picturePreview} alt="Vehicle preview" className="w-full h-full object-contain" />
                   ) : (
                     <div className="text-center text-slate-400 p-6">
                       <Upload className="w-10 h-10 mx-auto mb-3" />

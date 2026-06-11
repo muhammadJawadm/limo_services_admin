@@ -155,6 +155,7 @@ export default function Notifications() {
       }
 
       setStatus("Notification sent successfully.")
+      setTimeout(() => setStatus(""), 4000)
       setTitle("")
       setMessage("")
       setType("general")

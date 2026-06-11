@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import {
   AlertCircle,
   Calendar,
@@ -316,7 +317,8 @@ export default function Bookings() {
   const [driversError, setDriversError] = useState(null)
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [assignmentBooking, setAssignmentBooking] = useState(null)
-  const [searchTerm, setSearchTerm] = useState("")
+  const [searchParams] = useSearchParams()
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("q") || "")
   const [filterStatus, setFilterStatus] = useState("all")
   const [driverSearchTerm, setDriverSearchTerm] = useState("")
   const [assigningDriverId, setAssigningDriverId] = useState(null)
@@ -824,15 +826,17 @@ export default function Bookings() {
                         </span>
                       </div>
 
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          openAssignmentModal(booking)
-                        }}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--brand-primary)] text-white text-xs font-semibold shadow-sm hover:opacity-95 transition-all"
-                      >
-                        {assignedDriver ? "Change Driver" : "Assign Driver"}
-                      </button>
+                      {!["completed", "cancelled", "ongoing", "in_progress"].includes(booking.rideStatus) && (
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openAssignmentModal(booking)
+                          }}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--brand-primary)] text-white text-xs font-semibold shadow-sm hover:opacity-95 transition-all"
+                        >
+                          {assignedDriver ? "Change Driver" : "Assign Driver"}
+                        </button>
+                      )}
                     </div>
                   </div>
 

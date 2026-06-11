@@ -1,24 +1,23 @@
-import { createElement, useMemo } from "react"
-import { AlertCircle, CircleDollarSign, ShieldCheck, Ticket } from "lucide-react"
-import { useOps } from "../context/OpsContext"
+import { createElement, useEffect, useMemo, useState } from "react"
+import { AlertCircle, CircleDollarSign, Loader, ShieldCheck, Ticket } from "lucide-react"
+import apiService from "../services/api"
 
 function formatMoney(value) {
   const amount = Number(value || 0)
-  return `$${amount.toFixed(0)}`
+  return `$${amount.toFixed(2)}`
 }
 
-function normalizeStatus(status) {
-  return String(status || "unknown").trim().toLowerCase()
+function formatDate(iso) {
+  if (!iso) return "—"
+  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
 }
 
 function getStatusTone(status) {
-  const normalized = normalizeStatus(status)
-
-  if (normalized === "completed") return "bg-emerald-100 text-emerald-700"
-  if (normalized === "authorized") return "bg-blue-100 text-blue-700"
-  if (normalized === "pending") return "bg-amber-100 text-amber-700"
-  if (normalized.includes("follow-up") || normalized.includes("manual")) return "bg-rose-100 text-rose-700"
-
+  const s = String(status || "").toLowerCase()
+  if (s === "paid") return "bg-emerald-100 text-emerald-700"
+  if (s === "pending") return "bg-amber-100 text-amber-700"
+  if (s === "failed") return "bg-red-100 text-red-700"
+  if (s === "refunded") return "bg-blue-100 text-blue-700"
   return "bg-slate-100 text-slate-700"
 }
 
@@ -40,69 +39,100 @@ function StatCard({ title, value, description, icon: IconComponent, tone }) {
 }
 
 export default function Payments() {
-  const { trips } = useOps()
+  const [payments, setPayments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  const paymentTrips = trips.filter((trip) => trip.payment)
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const res = await apiService.getAdminPayments()
+        const records = Array.isArray(res?.data) ? res.data : []
+        setPayments(records)
+      } catch (err) {
+        setError(err.message || "Failed to load payment records.")
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
 
   const summary = useMemo(() => {
-    const totalAmount = paymentTrips.reduce((sum, trip) => sum + Number(trip.payment?.totalAmountCharged || 0), 0)
-    const completedCount = paymentTrips.filter((trip) => normalizeStatus(trip.payment?.status) === "completed").length
-    const pendingCount = paymentTrips.filter((trip) => normalizeStatus(trip.payment?.status) === "pending").length
-    const attentionCount = paymentTrips.filter((trip) => {
-      const status = normalizeStatus(trip.payment?.status)
-      return status.includes("follow-up") || status.includes("manual")
-    }).length
-
-    return { totalAmount, completedCount, pendingCount, attentionCount }
-  }, [paymentTrips])
+    const totalRevenue = payments
+      .filter((p) => p.paymentStatus === "paid")
+      .reduce((sum, p) => sum + Number(p.totalAmount || 0), 0)
+    const paidCount = payments.filter((p) => p.paymentStatus === "paid").length
+    const attentionCount = payments.filter((p) => p.paymentStatus === "pending" || p.paymentStatus === "failed").length
+    return { totalRevenue, paidCount, attentionCount }
+  }, [payments])
 
   return (
     <section className="space-y-5">
       <div className="panel p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Booking payment records</h2>
-        <p className="text-sm text-slate-500 mt-1">Track the payment amount and status for each booking in the system.</p>
+        <h2 className="text-xl font-semibold text-slate-900">Payment Records</h2>
+        <p className="text-sm text-slate-500 mt-1">Real-time payment data from Stripe — only bookings with an actual payment intent are shown.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard title="Total bookings" value={paymentTrips.length} description="Bookings with payment records" icon={Ticket} tone="bg-blue-50 text-blue-600" />
-        <StatCard title="Total amount" value={formatMoney(summary.totalAmount)} description="Combined charged amount" icon={CircleDollarSign} tone="bg-emerald-50 text-emerald-600" />
-        <StatCard title="Completed payments" value={summary.completedCount} description="Payments marked completed" icon={ShieldCheck} tone="bg-emerald-50 text-emerald-600" />
-        <StatCard title="Needs attention" value={summary.attentionCount || summary.pendingCount} description="Pending or follow-up payments" icon={AlertCircle} tone="bg-rose-50 text-rose-600" />
+        <StatCard title="Total records" value={loading ? "—" : payments.length} description="Bookings with a payment intent" icon={Ticket} tone="bg-blue-50 text-blue-600" />
+        <StatCard title="Total revenue" value={loading ? "—" : formatMoney(summary.totalRevenue)} description="Sum of paid transactions" icon={CircleDollarSign} tone="bg-emerald-50 text-emerald-600" />
+        <StatCard title="Paid" value={loading ? "—" : summary.paidCount} description="Payments confirmed as paid" icon={ShieldCheck} tone="bg-emerald-50 text-emerald-600" />
+        <StatCard title="Needs attention" value={loading ? "—" : summary.attentionCount} description="Pending or failed payments" icon={AlertCircle} tone="bg-rose-50 text-rose-600" />
       </div>
 
       <article className="panel overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold">Booking Number</th>
-                <th className="px-4 py-3 text-left font-semibold">Payment Amount</th>
-                <th className="px-4 py-3 text-left font-semibold">Payment Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paymentTrips.length ? (
-                paymentTrips.map((trip) => (
-                  <tr key={trip.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3 font-semibold text-[var(--brand-primary)]">{trip.id}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-800">{formatMoney(trip.payment.totalAmountCharged)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusTone(trip.payment.status)}`}>
-                        {trip.payment.status || "Unknown"}
-                      </span>
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-slate-500">
+            <Loader size={18} className="animate-spin" />
+            <span className="text-sm">Loading payment records…</span>
+          </div>
+        ) : error ? (
+          <div className="px-5 py-8 text-center text-red-600 text-sm">{error}</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">Conf #</th>
+                  <th className="px-4 py-3 text-left font-semibold">Vehicle</th>
+                  <th className="px-4 py-3 text-left font-semibold">Total</th>
+                  <th className="px-4 py-3 text-left font-semibold">Platform Fee</th>
+                  <th className="px-4 py-3 text-left font-semibold">Driver Amount</th>
+                  <th className="px-4 py-3 text-left font-semibold">Status</th>
+                  <th className="px-4 py-3 text-left font-semibold">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.length ? (
+                  payments.map((p) => (
+                    <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 font-semibold text-[var(--brand-primary)]">{p.confNumber || p.id}</td>
+                      <td className="px-4 py-3 text-slate-700">{p.vehicleCategory?.name || "—"}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{formatMoney(p.totalAmount)}</td>
+                      <td className="px-4 py-3 text-slate-600">{formatMoney(p.platformFee)}</td>
+                      <td className="px-4 py-3 text-slate-600">{formatMoney(p.driverAmount)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusTone(p.paymentStatus)}`}>
+                          {p.paymentStatus || "unknown"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{formatDate(p.createdAt)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr className="border-t border-slate-100">
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                      No payment records found.
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr className="border-t border-slate-100">
-                  <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
-                    No payment records found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </article>
     </section>
   )

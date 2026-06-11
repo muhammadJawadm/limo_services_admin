@@ -166,7 +166,10 @@ export default function Dashboard() {
 
     const verifiedDrivers = drivers.filter((driver) => driver?.user?.isVerified ?? driver?.isVerified)
     const onboardedDrivers = drivers.filter((driver) => driver?.user?.onboardingCompleted ?? driver?.onboardingCompleted)
-    const availableDrivers = drivers.filter((driver) => (driver?.available ?? driver?.user?.available) !== false)
+    const availableDrivers = drivers.filter((driver) =>
+      (driver?.available ?? driver?.user?.available) !== false &&
+      (driver?.user?.isVerified ?? driver?.isVerified)
+    )
 
     const recentBookings = [...bookings]
       .sort((a, b) => new Date(b.createdAt || b.pickupDateTime || 0) - new Date(a.createdAt || a.pickupDateTime || 0))

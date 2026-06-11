@@ -32,6 +32,15 @@ export default function Header({ onMenuClick }) {
   const [open, setOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [headerSearch, setHeaderSearch] = useState("")
+
+  const handleHeaderSearch = (e) => {
+    if (e.key === "Enter" && headerSearch.trim()) {
+      navigate(`/bookings?q=${encodeURIComponent(headerSearch.trim())}`)
+      setHeaderSearch("")
+      setSearchOpen(false)
+    }
+  }
 
   const handleLogout = () => {
     logout();
@@ -94,6 +103,9 @@ export default function Header({ onMenuClick }) {
             <input
               type="text"
               placeholder="Search bookings, customers"
+              value={headerSearch}
+              onChange={(e) => setHeaderSearch(e.target.value)}
+              onKeyDown={handleHeaderSearch}
               className="bg-transparent border-none outline-none text-slate-900 text-[13px] w-full placeholder:text-slate-400"
             />
           </div>
@@ -132,6 +144,7 @@ export default function Header({ onMenuClick }) {
                 ))}
                 <div
                   className="px-4 py-2.5 text-center text-[12px] font-semibold text-[var(--brand-primary)] hover:text-[var(--brand-primary)]/80 cursor-pointer bg-slate-50 border-t border-slate-100"
+                  onClick={() => { setOpen(false); navigate("/notifications"); }}
                 >
                   Open notification center
                 </div>

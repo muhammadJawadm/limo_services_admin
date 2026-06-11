@@ -373,7 +373,9 @@ verifyDriver(driverId, isVerified) {
   });
 }
 
-  
+  getAdminPayments() {
+    return this.get('/api/admin/payments');
+  }
 }
 
 // Export singleton instance

@@ -42,10 +42,19 @@ const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-US", { year: "nume
 
 const isPdf = (url) => url && url.toLowerCase().includes(".pdf")
 
+const resolveUrl = (url) => {
+  if (!url) return url
+  if (/^https?:\/\//i.test(url)) return url
+  const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "")
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`
+}
+
 // ─── Document Card ────────────────────────────────────────────────────────────
 function DocCard({ label, url, expiry, status }) {
   const [preview, setPreview] = useState(false)
+  const [imgError, setImgError] = useState(false)
   const uploaded = status === "uploaded" && url
+  const resolvedUrl = resolveUrl(url)
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -69,7 +78,7 @@ function DocCard({ label, url, expiry, status }) {
         {uploaded ? (
           <div className="flex gap-2">
             <a
-              href={url}
+              href={resolvedUrl}
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1.5 text-xs text-[var(--brand-primary)] hover:underline"
@@ -77,9 +86,9 @@ function DocCard({ label, url, expiry, status }) {
               <ExternalLink className="w-3.5 h-3.5" />
               Open file
             </a>
-            {!isPdf(url) && (
+            {!isPdf(resolvedUrl) && (
               <button
-                onClick={() => setPreview(true)}
+                onClick={() => { setPreview(true); setImgError(false) }}
                 className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900"
               >
                 <Eye className="w-3.5 h-3.5" />
@@ -95,7 +104,7 @@ function DocCard({ label, url, expiry, status }) {
       {/* Lightbox */}
       {preview && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
           onClick={() => setPreview(false)}
         >
           <div className="relative max-w-3xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
@@ -105,11 +114,22 @@ function DocCard({ label, url, expiry, status }) {
             >
               <X className="w-4 h-4" /> Close
             </button>
-            <img
-              src={url}
-              alt={label}
-              className="w-full rounded-xl shadow-2xl object-contain max-h-[80vh]"
-            />
+            {imgError ? (
+              <div className="flex flex-col items-center justify-center gap-3 bg-slate-900 rounded-xl p-12 text-slate-400">
+                <FileText className="w-10 h-10" />
+                <p className="text-sm">Unable to load preview.</p>
+                <a href={resolvedUrl} target="_blank" rel="noreferrer" className="text-xs text-[var(--brand-primary)] hover:underline flex items-center gap-1">
+                  <ExternalLink className="w-3.5 h-3.5" /> Open file directly
+                </a>
+              </div>
+            ) : (
+              <img
+                src={resolvedUrl}
+                alt={label}
+                onError={() => setImgError(true)}
+                className="w-full rounded-xl shadow-2xl object-contain max-h-[80vh] bg-slate-900"
+              />
+            )}
           </div>
         </div>
       )}
@@ -316,8 +336,28 @@ function DriverDetailPanel({ driver, onVerify, verifying }) {
 
         <Section icon={CreditCard} title="Payment / Stripe">
           <div className="grid grid-cols-2 gap-4">
-            <InfoRow label="Account ID"    value={driver.stripeAccountId || "Not set"} mono />
-            <InfoRow label="Stripe Status" value={driver.stripeOnboarded ? "Onboarded" : "Pending"} />
+            <InfoRow label="Account ID" value={driver.stripeAccountId || "Not set"} mono />
+            <div className="flex flex-col gap-0.5">
+              <p className="text-xs text-slate-500 uppercase tracking-wide">Stripe Status</p>
+              {(() => {
+                const isConnected =
+                  driver.stripeOnboarded ||
+                  driver.chargesEnabled ||
+                  driver.payoutsEnabled
+                const hasPendingAccount = driver.stripeAccountId && !isConnected
+                if (isConnected)
+                  return <span className="inline-flex w-fit items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">Connected</span>
+                if (hasPendingAccount)
+                  return <span className="inline-flex w-fit items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Pending</span>
+                return <span className="inline-flex w-fit items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">Not Connected</span>
+              })()}
+            </div>
+            {driver.chargesEnabled != null && (
+              <InfoRow label="Charges Enabled" value={driver.chargesEnabled ? "Yes" : "No"} />
+            )}
+            {driver.payoutsEnabled != null && (
+              <InfoRow label="Payouts Enabled" value={driver.payoutsEnabled ? "Yes" : "No"} />
+            )}
           </div>
         </Section>
       </div>
